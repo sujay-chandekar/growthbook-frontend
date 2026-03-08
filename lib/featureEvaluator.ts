@@ -1,26 +1,8 @@
-/**
- * Manually evaluate GrowthBook feature conditions
- * This ensures proper rule evaluation based on user attributes
- */
-
-interface Condition {
-  [key: string]: unknown;
-  $or?: Condition[];
-  $and?: Condition[];
-  $not?: Condition;
-}
-
-interface Rule {
-  id: string;
-  condition?: Condition;
-  force?: boolean;
-  variations?: boolean[];
-  key?: string;
-}
+import { GrowthBook } from "@growthbook/growthbook";
 
 interface Feature {
   defaultValue?: boolean;
-  rules?: Rule[];
+  rules?: any[];
 }
 
 interface Features {
@@ -31,69 +13,41 @@ interface Attributes {
   [key: string]: unknown;
 }
 
-export function evaluateCondition(condition: Condition | undefined, attributes: Attributes): boolean {
-  if (!condition) return true;
+/**
+ * Evaluate a single feature using GrowthBook SDK
+ */
+export function evaluateFeature(
+  featureName: string,
+  features: Features,
+  attributes: Attributes
+): boolean {
 
-  // Handle $or operator
-  if (condition.$or && Array.isArray(condition.$or)) {
-    return condition.$or.some((cond) => evaluateCondition(cond, attributes));
-  }
+  const gb = new GrowthBook({
+    features,
+    attributes
+  });
 
-  // Handle $and operator
-  if (condition.$and && Array.isArray(condition.$and)) {
-    return condition.$and.every((cond) => evaluateCondition(cond, attributes));
-  }
-
-  // Handle $not operator
-  if (condition.$not) {
-    return !evaluateCondition(condition.$not, attributes);
-  }
-
-  // Handle direct attribute matching
-  for (const [key, value] of Object.entries(condition)) {
-    if (key.startsWith("$")) continue; // Skip operators
-
-    const attrValue = attributes[key];
-
-    if (Array.isArray(value)) {
-      if (!value.includes(attrValue)) return false;
-    } else {
-      if (attrValue !== value) return false;
-    }
-  }
-
-  return true;
+  return gb.isOn(featureName);
 }
 
-export function evaluateFeature(feature: Feature | undefined, attributes: Attributes): boolean {
-  if (!feature) return false;
 
-  // Check rules
-  if (feature.rules && Array.isArray(feature.rules)) {
-    for (const rule of feature.rules) {
-      // If condition matches, return the force value
-      if (evaluateCondition(rule.condition, attributes)) {
-        if (rule.force !== undefined) {
-          return rule.force;
-        }
-        if (rule.variations !== undefined && rule.key !== undefined) {
-          // Handle variations if needed
-          return rule.variations[0] || false; // Default to first variation
-        }
-      }
-    }
-  }
+/**
+ * Evaluate all features for a user
+ */
+export function evaluateAllFeatures(
+  features: Features,
+  attributes: Attributes
+): Record<string, boolean> {
 
-  // Return default value
-  return feature.defaultValue || false;
-}
+  const gb = new GrowthBook({
+    features,
+    attributes
+  });
 
-export function evaluateAllFeatures(features: Features, attributes: Attributes): Record<string, boolean> {
   const results: Record<string, boolean> = {};
 
-  for (const [featureName, feature] of Object.entries(features)) {
-
-    results[featureName] = evaluateFeature(feature, attributes);
+  for (const featureName of Object.keys(features)) {
+    results[featureName] = gb.isOn(featureName);
   }
 
   return results;
